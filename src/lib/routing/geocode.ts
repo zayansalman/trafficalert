@@ -49,9 +49,13 @@ export function searchGazetteer(query: string): Place[] {
       const n = normalise(name);
       let confidence = 0;
 
+      // An exact name, or a whole name found inside the user's sentence, is safe to route on.
+      // A fragment of a name ("mirpur", "27") is not: it fits several entries equally well and
+      // picking one silently sends the user somewhere they did not ask for. Scoring it below
+      // MIN_USABLE_CONFIDENCE turns it into a suggestion, so the caller asks which one.
       if (n === q) confidence = 1;
       else if (containsPhrase(q, n)) confidence = 0.8;
-      else if (containsPhrase(n, q)) confidence = 0.6;
+      else if (containsPhrase(n, q)) confidence = 0.4;
 
       if (confidence > best || (confidence === best && n.length > matched.length)) {
         best = confidence;

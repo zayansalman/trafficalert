@@ -12,6 +12,16 @@
 One issue, one branch, one PR. Keep branches short-lived — merge often rather than letting a
 branch drift far from `main`.
 
+## Checks
+
+```
+npm test     # vitest, colocated as foo.test.ts beside foo.ts
+npm run lint
+npm run build
+```
+
+Run all three before pushing.
+
 ## Current priorities
 
 See the GitHub issues labeled `mvp:now` for what's being built right now, and `mvp:later` for

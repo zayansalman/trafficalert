@@ -31,6 +31,21 @@ the calling code changes.
 
 Attribution is required when any of this is displayed: *"© OpenStreetMap contributors"* (ODbL).
 
+### How confident a name match has to be
+
+A wrong guess sends someone down the wrong road, so only a whole-name match is allowed to route
+unprompted:
+
+| What matched | Confidence | What happens |
+|---|---|---|
+| The exact name or an alias — `dhanmondi 27`, `bijoy soroni` | 1.0 | routes |
+| A whole name inside a sentence — `heading to bijoy soroni now` | 0.8 | routes |
+| A Nominatim result | 0.5–0.7 | routes, flagged `uncertain` so the assistant names its assumption |
+| A fragment of a name — `mirpur`, `27` | 0.4 | below the threshold: the assistant asks which one was meant |
+
+That last row is why `mirpur` does not silently become Mirpur 10. Every candidate comes back as a
+suggestion instead.
+
 ## Corridor detection
 
 Traffic reports carry no coordinates — they say "Bijoy Sarani is stuck", not a lat/lng. So a
@@ -78,10 +93,24 @@ GET /api/route?from=Gulshan%201&to=Dhanmondi%2027
 Returns the resolved places and routes straight from the routing layer — the way to tell a
 geocoding or OSRM problem apart from a prompting one. Add `&geometry=1` for the full polyline.
 
+## Tests
+
+```
+npm test
+```
+
+Vitest, colocated as `foo.test.ts` beside `foo.ts`. Every test stubs `fetch` — none of them
+touch the public OSM services, which would be slow and would fail for reasons unrelated to this
+code. `osrm.fixture.ts` holds the canned route.
+
+The geocoder leaves a one-second cool-off pending after each Nominatim call. Test files that
+trigger one install fake timers and flush the gap in `afterEach`, which keeps the real rate limit
+intact while the suite stays under a second.
+
 ## Known gaps
 
 - Route options are returned in OSRM's order. Ranking them by reported congestion is
   [#15](https://github.com/zayansalman/trafficalert/issues/15) and is not implemented.
 - Matching is by area name via the model, not by geometry. Once reports carry coordinates, the
   polyline-buffer matching described in `parallel-plan.md` becomes possible and is stricter.
-- No automated tests — the repo has no test runner yet.
+- The live OSM calls have no coverage; only the parsing and failure handling around them do.

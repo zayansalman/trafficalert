@@ -73,7 +73,7 @@ export const DHAKA_GAZETTEER: GazetteerEntry[] = [
   { name: "Pallabi", location: { lat: 23.8230, lng: 90.3650 } },
   { name: "Kachukhet", location: { lat: 23.8100, lng: 90.3900 } },
   { name: "ECB Chattar", location: { lat: 23.8250, lng: 90.3880 }, aliases: ["ecb", "ecb circle"] },
-  { name: "Airport", location: { lat: 23.8433, lng: 90.3978 }, aliases: ["hazrat shahjalal international airport", "shahjalal airport", "dhaka airport", "bimanbandar"] },
+  { name: "Airport", location: { lat: 23.8433, lng: 90.3978 }, aliases: ["hazrat shahjalal international airport", "hazrat shahjalal", "shahjalal airport", "dhaka airport", "bimanbandar"] },
   { name: "Khilkhet", location: { lat: 23.8290, lng: 90.4197 } },
   { name: "Uttara", location: { lat: 23.8759, lng: 90.3795 }, aliases: ["uttara sector 7", "house building", "rajlakshmi"] },
   { name: "Abdullahpur", location: { lat: 23.8800, lng: 90.4000 } },
