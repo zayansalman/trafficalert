@@ -1,5 +1,17 @@
 # Parallel execution plan
 
+> **Superseded.** Tracking issue [#20](https://github.com/zayansalman/trafficalert/issues/20)
+> is closed; this plan was replaced by the simpler MVP scope in
+> [#7](https://github.com/zayansalman/trafficalert/issues/7),
+> [#8](https://github.com/zayansalman/trafficalert/issues/8),
+> [#9](https://github.com/zayansalman/trafficalert/issues/9), and Phase 2 issues
+> [#21](https://github.com/zayansalman/trafficalert/issues/21),
+> [#22](https://github.com/zayansalman/trafficalert/issues/22),
+> [#23](https://github.com/zayansalman/trafficalert/issues/23).
+> **The KV/Postgres-backed store described below was dropped — no time for a database.**
+> State persistence for now is in-memory and/or the `data/traffic-alerts/**` markdown files
+> that get rewritten. Kept here only as reference for the frozen type contracts.
+
 Tracking issue: [#20](https://github.com/zayansalman/trafficalert/issues/20)
 
 Every "depends on" line in the issue tracker is a **type** dependency, not a **behaviour**
@@ -269,9 +281,12 @@ export interface UserStore {
 `getStore()` / `getUserStore()` live in `lib/store/select.ts` (owned by T3) so #16 can swap the
 implementation without touching T1's interface file.
 
-**Hour-zero implementation is KV-backed, not a plain in-memory array.** Vercel serverless functions
-do not share memory across invocations, so an in-memory store loses user reports between requests
-and the #12 → #13 consensus demo can never fire. This is a silent failure — no error anywhere.
+~~**Hour-zero implementation is KV-backed, not a plain in-memory array.**~~ Superseded — no
+database for now (owner call, see notice at top of this doc). The real risk this paragraph
+flagged is still true (Vercel serverless functions don't share memory across invocations, so an
+in-memory store loses user reports between requests and cross-request consensus can silently
+never fire); the accepted mitigation for now is persisting to the `data/traffic-alerts/**`
+markdown files instead of a KV/DB, not skipping persistence altogether.
 
 ### Session identity is not client-supplied
 
