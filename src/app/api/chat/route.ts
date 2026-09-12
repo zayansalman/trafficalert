@@ -3,6 +3,9 @@ import OpenAI from "openai";
 import { GEMINI_BASE_URL, GEMINI_MODEL, requireGeminiKey } from "@/lib/config";
 import { loadTrafficContext } from "@/lib/traffic/loadAlerts";
 
+export const runtime = "nodejs";
+export const maxDuration = 60;
+
 interface ChatMessage {
   role: "user" | "assistant";
   content: string;
@@ -54,7 +57,15 @@ export async function POST(req: NextRequest) {
     const reply = completion.choices[0]?.message?.content ?? "";
     return NextResponse.json({ reply });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error("[api/chat] upstream call failed", err);
+
+    // Upstream errors carry the request URL and quota details — don't hand those to the browser.
+    const status = err instanceof OpenAI.APIError ? err.status : undefined;
+    const error =
+      status === 429
+        ? "The traffic assistant is over its request limit right now. Please try again in a minute."
+        : "Sorry, the traffic assistant is having trouble right now. Please try again.";
+
+    return NextResponse.json({ error }, { status: status === 429 ? 429 : 500 });
   }
 }
