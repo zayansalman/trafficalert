@@ -75,6 +75,14 @@ Failures are returned to the model as ordinary results (`place_not_found`, `no_r
 `routing_unavailable`) with a hint, so a routing outage degrades to an answer from the reports
 alone rather than costing the user their reply.
 
+## Empty snapshots
+
+`data/traffic-alerts/**` is read newest first, so a placeholder snapshot — `Status: No live data
+source configured yet` over an empty Alerts table — used to land at the top of the model's
+context and read as "there is no traffic data", even with hundreds of real reports below it.
+`hasReports()` in `lib/traffic/loadAlerts.ts` now drops any snapshot carrying neither a post nor
+a populated Alerts row.
+
 ## Two things the model must never do
 
 Both are enforced by the system prompt in `src/app/api/chat/route.ts`:
