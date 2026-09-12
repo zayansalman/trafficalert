@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, FormEvent } from "react";
+import Link from "next/link";
 
 interface Message {
   id: string;
@@ -75,7 +76,7 @@ export default function ChatPage() {
       {/* Header */}
       <header className="sticky top-0 z-10 border-b border-zinc-200 bg-white/80 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/80">
         <div className="mx-auto flex max-w-3xl items-center gap-3 px-4 py-3">
-          <a
+          <Link
             href="/"
             className="text-zinc-400 transition-colors hover:text-zinc-600 dark:hover:text-zinc-300"
           >
@@ -92,7 +93,7 @@ export default function ChatPage() {
             >
               <path d="m15 18-6-6 6-6" />
             </svg>
-          </a>
+          </Link>
           <h1 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
             Traffic Alert
           </h1>
