@@ -1,6 +1,25 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { jsonResponse, okResponse } from "@/lib/routing/osrm.fixture";
-import { GET_ROUTE_TOOL, runGetRoute, runTool } from "./tools";
+import { addReport } from "@/lib/traffic/reportStore";
+import {
+  GET_ROUTE_TOOL,
+  SUBMIT_REPORT_TOOL,
+  runGetRoute,
+  runSubmitReport,
+  runTool,
+  type ToolContext,
+} from "./tools";
+
+// The real store writes into data/, which a unit test has no business touching.
+vi.mock("@/lib/traffic/reportStore", () => ({
+  addReport: vi.fn(async (report: Record<string, unknown>) => ({
+    ...report,
+    id: "report-1",
+    timestamp: "2026-09-12T06:00:00Z",
+  })),
+}));
+
+const CTX: ToolContext = { sessionId: "session-abc" };
 
 interface Stub {
   /** Geocoder results, or null to make the geocoder fail. */
@@ -39,6 +58,7 @@ afterAll(() => {
 afterEach(async () => {
   await vi.advanceTimersByTimeAsync(2_000);
   vi.unstubAllGlobals();
+  vi.mocked(addReport).mockClear();
 });
 
 describe("get_route success", () => {
@@ -140,16 +160,78 @@ describe("runTool", () => {
   it("dispatches get_route", async () => {
     stubNetwork();
     const result = JSON.parse(
-      await runTool(GET_ROUTE_TOOL, JSON.stringify({ origin: "Gulshan 1", destination: "Banani" })),
+      await runTool(GET_ROUTE_TOOL, JSON.stringify({ origin: "Gulshan 1", destination: "Banani" }), CTX),
     );
 
     expect(result.routes).toHaveLength(1);
   });
 
+  it("dispatches submit_report", async () => {
+    const result = JSON.parse(
+      await runTool(
+        SUBMIT_REPORT_TOOL,
+        JSON.stringify({ location: "Mirpur Road", severity: "high", description: "Gridlocked" }),
+        CTX,
+      ),
+    );
+
+    expect(result.success).toBe(true);
+  });
+
   it("reports an unknown tool instead of throwing", async () => {
-    expect(JSON.parse(await runTool("no_such_tool", "{}"))).toEqual({
+    expect(JSON.parse(await runTool("no_such_tool", "{}", CTX))).toEqual({
       error: "unknown_tool",
       name: "no_such_tool",
     });
+  });
+});
+
+describe("submit_report", () => {
+  function submit(args: Record<string, unknown>) {
+    return runSubmitReport(JSON.stringify(args), CTX).then((raw) => JSON.parse(raw));
+  }
+
+  const VALID = {
+    location: "Mirpur Road near Shewrapara",
+    severity: "high",
+    description: "Gridlocked since morning",
+  };
+
+  it("stores a confirmed report and hands back its id", async () => {
+    const result = await submit(VALID);
+
+    expect(result).toMatchObject({ success: true, id: "report-1", location: VALID.location });
+    expect(addReport).toHaveBeenCalledOnce();
+  });
+
+  it("attributes the report to the caller's session", async () => {
+    await submit(VALID);
+
+    expect(addReport).toHaveBeenCalledWith(expect.objectContaining({ sessionId: "session-abc" }));
+  });
+
+  it("accepts a severity the model capitalised", async () => {
+    expect((await submit({ ...VALID, severity: "High" })).success).toBe(true);
+  });
+
+  it.each([
+    ["location", { ...VALID, location: "" }],
+    ["description", { ...VALID, description: "   " }],
+    ["severity", { ...VALID, severity: "catastrophic" }],
+  ])("refuses to store a report missing a valid %s", async (_field, args) => {
+    expect((await submit(args)).error).toBe("incomplete_report");
+    expect(addReport).not.toHaveBeenCalled();
+  });
+
+  it("reports malformed arguments", async () => {
+    expect(JSON.parse(await runSubmitReport("{oops", CTX)).error).toBe("bad_arguments");
+  });
+
+  it("tells the user when the store rejects the write", async () => {
+    vi.mocked(addReport).mockRejectedValueOnce(new Error("store down"));
+
+    const result = await submit(VALID);
+    expect(result.error).toBe("report_not_saved");
+    expect(result.hint).toMatch(/try again/i);
   });
 });

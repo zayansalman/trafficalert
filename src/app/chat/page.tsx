@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, FormEvent } from "react";
+import { useState, useRef, useEffect, useMemo, FormEvent } from "react";
 import Link from "next/link";
 
 interface Message {
@@ -10,8 +10,21 @@ interface Message {
   timestamp: Date;
 }
 
+// The assistant bolds place names with **markers**; that's the only markup it emits,
+// so render it inline rather than pulling in a markdown dependency.
+function renderBold(text: string) {
+  return text.split(/(\*\*[^*]+\*\*)/g).map((part, i) =>
+    part.startsWith("**") && part.endsWith("**") ? (
+      <strong key={i}>{part.slice(2, -2)}</strong>
+    ) : (
+      part
+    ),
+  );
+}
+
 
 export default function ChatPage() {
+  const sessionId = useMemo(() => crypto.randomUUID(), []);
   const [messages, setMessages] = useState<Message[]>([
     {
       id: "welcome",
@@ -58,7 +71,7 @@ export default function ChatPage() {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: chatHistory }),
+        body: JSON.stringify({ messages: chatHistory, sessionId }),
       });
 
       const data = await res.json();
@@ -135,13 +148,13 @@ export default function ChatPage() {
                 className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
               >
                 <div
-                  className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
+                  className={`max-w-[80%] whitespace-pre-wrap rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
                     msg.role === "user"
                       ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
                       : "bg-white text-zinc-800 shadow-sm ring-1 ring-zinc-200 dark:bg-zinc-900 dark:text-zinc-200 dark:ring-zinc-800"
                   }`}
                 >
-                  {msg.content}
+                  {renderBold(msg.content)}
                 </div>
               </div>
             ))}

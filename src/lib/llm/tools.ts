@@ -1,9 +1,19 @@
 import type OpenAI from "openai";
 import { getRoute, PlaceNotFoundError } from "@/lib/routing/getRoute";
 import { RoutingError } from "@/lib/routing/osrm";
+import { addReport } from "@/lib/traffic/reportStore";
 import type { Place, Route } from "@/types/routing";
 
 export const GET_ROUTE_TOOL = "get_route";
+export const SUBMIT_REPORT_TOOL = "submit_report";
+
+const SEVERITIES = ["low", "medium", "high"] as const;
+type Severity = (typeof SEVERITIES)[number];
+
+/** Per-request state a tool may need. */
+export interface ToolContext {
+  sessionId: string;
+}
 
 /** Below this the assistant should name the place it assumed so the user can correct it. */
 const UNCERTAIN_MATCH_CONFIDENCE = 0.8;
@@ -32,6 +42,38 @@ export const TOOL_DEFINITIONS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
           },
         },
         required: ["origin", "destination"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: SUBMIT_REPORT_TOOL,
+      description:
+        "Store a user-submitted traffic report. Call this ONLY after the user has confirmed " +
+        "the details you summarised back to them.",
+      parameters: {
+        type: "object",
+        properties: {
+          location: {
+            type: "string",
+            description:
+              "The road, intersection, or area name in Dhaka (e.g. 'Mirpur Road near Shewrapara')",
+          },
+          severity: {
+            type: "string",
+            enum: [...SEVERITIES],
+            description:
+              "low = slow but moving, medium = significant delays / stop-and-go, " +
+              "high = gridlocked / road blocked / accident",
+          },
+          description: {
+            type: "string",
+            description:
+              "Short plain-English summary of what the user reported (e.g. 'Heavy traffic due to road construction')",
+          },
+        },
+        required: ["location", "severity", "description"],
       },
     },
   },
@@ -130,8 +172,75 @@ export async function runGetRoute(rawArgs: string): Promise<string> {
   }
 }
 
+interface ReportArgs {
+  location?: unknown;
+  severity?: unknown;
+  description?: unknown;
+}
+
+function text(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+/**
+ * Store a traffic report the user has confirmed.
+ *
+ * Like `get_route`, failures come back as results rather than exceptions so the assistant can
+ * tell the user their report did not save instead of the request dying.
+ */
+export async function runSubmitReport(
+  rawArgs: string,
+  ctx: ToolContext,
+): Promise<string> {
+  let args: ReportArgs;
+  try {
+    args = JSON.parse(rawArgs) as ReportArgs;
+  } catch {
+    return JSON.stringify({ error: "bad_arguments" });
+  }
+
+  const location = text(args.location);
+  const description = text(args.description);
+  const severity = text(args.severity).toLowerCase() as Severity;
+
+  if (!location || !description || !SEVERITIES.includes(severity)) {
+    return JSON.stringify({
+      error: "incomplete_report",
+      hint: "Ask the user for whichever of the location, severity or description is missing.",
+    });
+  }
+
+  try {
+    const report = await addReport({
+      location,
+      severity,
+      description,
+      sessionId: ctx.sessionId,
+    });
+
+    return JSON.stringify({
+      success: true,
+      id: report.id,
+      location: report.location,
+      severity: report.severity,
+      description: report.description,
+    });
+  } catch (err) {
+    console.error("[llm/tools] submit_report failed", err);
+    return JSON.stringify({
+      error: "report_not_saved",
+      hint: "Tell the user the report could not be saved and they can try again.",
+    });
+  }
+}
+
 /** Dispatch a tool call by name. Unknown names are reported back, not thrown. */
-export async function runTool(name: string, rawArgs: string): Promise<string> {
+export async function runTool(
+  name: string,
+  rawArgs: string,
+  ctx: ToolContext,
+): Promise<string> {
   if (name === GET_ROUTE_TOOL) return runGetRoute(rawArgs);
+  if (name === SUBMIT_REPORT_TOOL) return runSubmitReport(rawArgs, ctx);
   return JSON.stringify({ error: "unknown_tool", name });
 }

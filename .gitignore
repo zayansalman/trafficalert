@@ -40,3 +40,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# user-submitted reports (local runtime data, not source)
+/data/user-reports.json
