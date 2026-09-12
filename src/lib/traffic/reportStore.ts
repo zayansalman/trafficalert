@@ -1,4 +1,4 @@
-import { getDb, ensureSchema } from "@/lib/db";
+import { getDb, ensureSchema, isDbConfigured } from "@/lib/db";
 import { getFreshness, formatAge, formatDhakaTime } from "./timestamps";
 
 export interface UserReport {
@@ -13,14 +13,18 @@ export interface UserReport {
 export async function addReport(
   report: Omit<UserReport, "id" | "timestamp">,
 ): Promise<UserReport> {
-  await ensureSchema();
-
   const entry: UserReport = {
     ...report,
     id: crypto.randomUUID(),
     timestamp: new Date().toISOString(),
   };
 
+  if (!isDbConfigured()) {
+    console.warn("[reportStore] TURSO_DATABASE_URL not set — report not persisted");
+    return entry;
+  }
+
+  await ensureSchema();
   await getDb().execute({
     sql: `INSERT INTO user_reports (id, location, severity, description, timestamp, session_id)
           VALUES (?, ?, ?, ?, ?, ?)`,
@@ -32,6 +36,8 @@ export async function addReport(
 
 /** Load user reports and format them as context for the system prompt. */
 export async function loadUserReportContext(): Promise<string> {
+  if (!isDbConfigured()) return "";
+
   await ensureSchema();
 
   const result = await getDb().execute(

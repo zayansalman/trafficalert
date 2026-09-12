@@ -2,6 +2,10 @@ import { createClient, type Client } from "@libsql/client";
 
 let client: Client | undefined;
 
+export function isDbConfigured(): boolean {
+  return !!process.env.TURSO_DATABASE_URL;
+}
+
 export function getDb(): Client {
   if (!client) {
     const url = process.env.TURSO_DATABASE_URL;
