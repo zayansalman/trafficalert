@@ -38,6 +38,61 @@ function annotatePost(
   return `${line}\n   [Freshness: ${label} — posted ${age}, approx ${formatDhakaTime(postTime)}]`;
 }
 
+const ALERTS_HEADING_RE = /^##\s+alerts\s*$/i;
+const HEADING_RE = /^##\s+/;
+
+/** Cells of a markdown table row, or null if the line isn't one. */
+function parseRow(line: string): string[] | null {
+  const trimmed = line.trim();
+  if (!trimmed.startsWith("|") || !trimmed.endsWith("|")) return null;
+  return trimmed.slice(1, -1).split("|").map((cell) => cell.trim());
+}
+
+function isSeparatorRow(cells: string[]): boolean {
+  return cells.every((cell) => /^:?-+:?$/.test(cell));
+}
+
+/** True once the Alerts table holds a row that is neither its header, its rule, nor a dash. */
+function alertsTableHasRows(lines: string[]): boolean {
+  let inAlerts = false;
+  let pastHeader = false;
+
+  for (const line of lines) {
+    if (ALERTS_HEADING_RE.test(line)) {
+      inAlerts = true;
+      pastHeader = false;
+      continue;
+    }
+    if (inAlerts && HEADING_RE.test(line)) inAlerts = false;
+    if (!inAlerts) continue;
+
+    const cells = parseRow(line);
+    if (!cells) continue;
+
+    if (!pastHeader) {
+      // The row of dashes separates the header from the body; anything after it is data.
+      if (isSeparatorRow(cells)) pastHeader = true;
+      continue;
+    }
+
+    if (cells.some((cell) => cell !== "" && cell !== "-")) return true;
+  }
+
+  return false;
+}
+
+/**
+ * True when a snapshot carries at least one actual report.
+ *
+ * Snapshots are sorted newest first, so a placeholder — "No live data source configured yet"
+ * over an empty Alerts table — lands at the very top of the model's context and reads as
+ * "there is no traffic data", even with hundreds of real reports below it.
+ */
+export function hasReports(content: string): boolean {
+  const lines = content.split("\n");
+  return lines.some((line) => POST_HEADER_RE.test(line)) || alertsTableHasRows(lines);
+}
+
 function annotateContent(
   content: string,
   compileTime: Date,
@@ -69,6 +124,8 @@ export async function loadTrafficContext(): Promise<string> {
 
   for (const file of files) {
     const raw = await readFile(path.join(ALERTS_DIR, file), "utf-8");
+    if (!hasReports(raw)) continue;
+
     const compileTime = parseCompileTime(file);
 
     let content: string;
