@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import OpenAI from "openai";
-import { OPENAI_MODEL, requireOpenAiKey } from "@/lib/config";
+import { GEMINI_BASE_URL, GEMINI_MODEL, requireGeminiKey } from "@/lib/config";
 import { loadTrafficContext } from "@/lib/traffic/loadAlerts";
 
 export const runtime = "nodejs";
@@ -28,7 +28,7 @@ ${trafficContext || "No traffic data is currently available."}
 export async function POST(req: NextRequest) {
   let apiKey: string;
   try {
-    apiKey = requireOpenAiKey();
+    apiKey = requireGeminiKey();
   } catch {
     return new Response("The traffic assistant isn't configured on the server yet.", {
       status: 500,
@@ -42,10 +42,10 @@ export async function POST(req: NextRequest) {
   }
 
   const trafficContext = await loadTrafficContext();
-  const client = new OpenAI({ apiKey });
+  const client = new OpenAI({ apiKey, baseURL: GEMINI_BASE_URL });
 
   const completion = await client.chat.completions.create({
-    model: OPENAI_MODEL,
+    model: GEMINI_MODEL,
     stream: true,
     temperature: 0.2,
     messages: [
