@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, FormEvent } from "react";
+import { useState, useRef, useEffect, useMemo, FormEvent } from "react";
 import Link from "next/link";
 
 interface Message {
@@ -24,6 +24,7 @@ function renderBold(text: string) {
 
 
 export default function ChatPage() {
+  const sessionId = useMemo(() => crypto.randomUUID(), []);
   const [messages, setMessages] = useState<Message[]>([
     {
       id: "welcome",
@@ -70,7 +71,7 @@ export default function ChatPage() {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: chatHistory }),
+        body: JSON.stringify({ messages: chatHistory, sessionId }),
       });
 
       const data = await res.json();
