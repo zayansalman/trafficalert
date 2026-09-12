@@ -1,9 +1,7 @@
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { GEMINI_BASE_URL, GEMINI_MODEL, requireGeminiKey } from "@/lib/config";
 import { loadTrafficContext } from "@/lib/traffic/loadAlerts";
-
-export const runtime = "nodejs";
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -19,6 +17,7 @@ Rules you must always follow:
 3. Only discuss Dhaka-area traffic: roads, routes, jams, accidents, closures, protests, or other incidents found in the data below. Politely decline anything unrelated to traffic (general knowledge, coding help, other topics) and redirect the user to ask about Dhaka traffic.
 4. Be concise. Mention the location and how recent a report is when that's available.
 5. Reports are crowd-sourced from a Facebook group and may be outdated, conflicting, or mix Bangla and English — flag it when reports disagree.
+6. When an incident is mentioned by more than one post or comment, say how many separate people reported it (e.g. "reported by 5 different people") — this tells the user how corroborated it is. Only count distinct posters, never the same person's post and its own replies as separate reports, and never state a count for something only one source mentions.
 
 --- TRAFFIC DATA (current known reports) ---
 ${trafficContext || "No traffic data is currently available."}
@@ -30,46 +29,32 @@ export async function POST(req: NextRequest) {
   try {
     apiKey = requireGeminiKey();
   } catch {
-    return new Response("The traffic assistant isn't configured on the server yet.", {
-      status: 500,
-    });
+    return NextResponse.json(
+      { error: "The traffic assistant isn't configured on the server yet." },
+      { status: 500 },
+    );
   }
 
   const body = (await req.json().catch(() => null)) as { messages?: ChatMessage[] } | null;
   const messages = body?.messages;
   if (!Array.isArray(messages) || messages.length === 0) {
-    return new Response("messages is required", { status: 400 });
+    return NextResponse.json({ error: "messages array is required" }, { status: 400 });
   }
 
-  const trafficContext = await loadTrafficContext();
-  const client = new OpenAI({ apiKey, baseURL: GEMINI_BASE_URL });
+  try {
+    const trafficContext = await loadTrafficContext();
+    const client = new OpenAI({ apiKey, baseURL: GEMINI_BASE_URL });
 
-  const completion = await client.chat.completions.create({
-    model: GEMINI_MODEL,
-    stream: true,
-    temperature: 0.2,
-    messages: [
-      { role: "system", content: buildSystemPrompt(trafficContext) },
-      ...messages,
-    ],
-  });
+    const completion = await client.chat.completions.create({
+      model: GEMINI_MODEL,
+      temperature: 0.2,
+      messages: [{ role: "system", content: buildSystemPrompt(trafficContext) }, ...messages],
+    });
 
-  const encoder = new TextEncoder();
-  const stream = new ReadableStream({
-    async start(controller) {
-      try {
-        for await (const chunk of completion) {
-          const delta = chunk.choices[0]?.delta?.content;
-          if (delta) controller.enqueue(encoder.encode(delta));
-        }
-        controller.close();
-      } catch (err) {
-        controller.error(err);
-      }
-    },
-  });
-
-  return new Response(stream, {
-    headers: { "Content-Type": "text/plain; charset=utf-8" },
-  });
+    const reply = completion.choices[0]?.message?.content ?? "";
+    return NextResponse.json({ reply });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 }
