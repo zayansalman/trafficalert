@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
-import { GEMINI_BASE_URL, GEMINI_MODEL, requireGeminiKey } from "@/lib/config";
+import { configuredProviders } from "@/lib/config";
 import { loadTrafficContext } from "@/lib/traffic/loadAlerts";
 
 export const runtime = "nodejs";
@@ -41,10 +41,8 @@ ${trafficContext || "No traffic data is currently available."}
 }
 
 export async function POST(req: NextRequest) {
-  let apiKey: string;
-  try {
-    apiKey = requireGeminiKey();
-  } catch {
+  const providers = configuredProviders();
+  if (providers.length === 0) {
     return NextResponse.json(
       { error: "The traffic assistant isn't configured on the server yet." },
       { status: 500 },
@@ -57,28 +55,40 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "messages array is required" }, { status: 400 });
   }
 
-  try {
-    const trafficContext = await loadTrafficContext();
-    const client = new OpenAI({ apiKey, baseURL: GEMINI_BASE_URL });
+  const trafficContext = await loadTrafficContext();
+  const prompt: OpenAI.Chat.ChatCompletionMessageParam[] = [
+    { role: "system", content: buildSystemPrompt(trafficContext) },
+    ...messages,
+  ];
 
-    const completion = await client.chat.completions.create({
-      model: GEMINI_MODEL,
-      temperature: 0.2,
-      messages: [{ role: "system", content: buildSystemPrompt(trafficContext) }, ...messages],
-    });
+  let lastStatus: number | undefined;
 
-    const reply = completion.choices[0]?.message?.content ?? "";
-    return NextResponse.json({ reply });
-  } catch (err) {
-    console.error("[api/chat] upstream call failed", err);
+  for (const provider of providers) {
+    try {
+      const client = new OpenAI({ apiKey: provider.apiKey, baseURL: provider.baseURL });
 
-    // Upstream errors carry the request URL and quota details — don't hand those to the browser.
-    const status = err instanceof OpenAI.APIError ? err.status : undefined;
-    const error =
-      status === 429
-        ? "The traffic assistant is over its request limit right now. Please try again in a minute."
-        : "Sorry, the traffic assistant is having trouble right now. Please try again.";
+      const completion = await client.chat.completions.create({
+        model: provider.model,
+        temperature: 0.2,
+        messages: prompt,
+      });
 
-    return NextResponse.json({ error }, { status: status === 429 ? 429 : 500 });
+      const reply = completion.choices[0]?.message?.content ?? "";
+      if (!reply) throw new Error("empty completion");
+
+      return NextResponse.json({ reply });
+    } catch (err) {
+      // Falls through to the next provider — a quota-exhausted Gemini shouldn't take the app down.
+      console.error(`[api/chat] ${provider.name} failed, trying next provider`, err);
+      lastStatus = err instanceof OpenAI.APIError ? err.status : undefined;
+    }
   }
+
+  // Upstream errors carry the request URL and quota details — don't hand those to the browser.
+  const error =
+    lastStatus === 429
+      ? "The traffic assistant is over its request limit right now. Please try again in a minute."
+      : "Sorry, the traffic assistant is having trouble right now. Please try again.";
+
+  return NextResponse.json({ error }, { status: lastStatus === 429 ? 429 : 500 });
 }
