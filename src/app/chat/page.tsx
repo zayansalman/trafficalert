@@ -50,18 +50,40 @@ export default function ChatPage() {
     setInput("");
     setIsLoading(true);
 
-    // TODO: replace with real API call when #9 is done
-    await new Promise((r) => setTimeout(r, 500));
+    const chatHistory = [...messages.filter((m) => m.id !== "welcome"), userMessage].map(
+      (m) => ({ role: m.role, content: m.content })
+    );
 
-    const assistantMessage: Message = {
-      id: crypto.randomUUID(),
-      role: "assistant",
-      content: "Backend not connected yet — the OpenAI endpoint is still being built.",
-      timestamp: new Date(),
-    };
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: chatHistory }),
+      });
 
-    setMessages((prev) => [...prev, assistantMessage]);
-    setIsLoading(false);
+      const data = await res.json();
+
+      const assistantMessage: Message = {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        content: data.reply ?? data.error ?? "Something went wrong.",
+        timestamp: new Date(),
+      };
+
+      setMessages((prev) => [...prev, assistantMessage]);
+    } catch {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          role: "assistant" as const,
+          content: "Failed to reach the server. Please try again.",
+          timestamp: new Date(),
+        },
+      ]);
+    } finally {
+      setIsLoading(false);
+    }
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
