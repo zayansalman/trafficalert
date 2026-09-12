@@ -15,3 +15,24 @@ export function requireGeminiKey(): string {
   }
   return GEMINI_API_KEY;
 }
+
+/**
+ * Public OSRM demo server — free, keyless, OpenStreetMap-derived road network.
+ *
+ * It is a *demo* instance: the OSRM project asks that anything beyond light use run its own
+ * copy, and it offers no uptime guarantee. Override this to point at a self-hosted instance
+ * (`docker run osrm/osrm-backend`) without touching any calling code.
+ */
+export const OSRM_BASE_URL =
+  process.env.OSRM_BASE_URL ?? "https://router.project-osrm.org";
+
+/** OpenStreetMap's free geocoder. Used only for places missing from our own gazetteer. */
+export const NOMINATIM_BASE_URL =
+  process.env.NOMINATIM_BASE_URL ?? "https://nominatim.openstreetmap.org";
+
+/**
+ * Nominatim's usage policy requires a User-Agent identifying the application.
+ * Requests without one are refused.
+ */
+export const OSM_USER_AGENT =
+  "trafficalert/0.1 (+https://github.com/zayansalman/trafficalert)";
